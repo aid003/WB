@@ -1,5 +1,8 @@
+
 import dotenv, { parse } from "dotenv";
 import TelegramBot from "node-telegram-bot-api";
+import { PrismaClient } from '@prisma/client'
+
 
 dotenv.config()
 
@@ -15,7 +18,11 @@ const bot = new TelegramBot(process.env.API_KEY_BOT, {
     
 });
 
-bot.on("polling_error", err => console.log(err.data.error.message));
+
+const prisma = new PrismaClient()
+
+async function main() {
+  bot.on("polling_error", err => console.log(err.data.error.message));
 
 bot.on('text', async msg => {
     if(msg.text === '/start') {
@@ -141,17 +148,203 @@ bot.on('text', async msg => {
     }
 
     if(msg.text === "/anal" ) {
-        bot.sendMessage(msg.chat.id, "РАЗРАБОТКА........")
-    }
+        const productsByDb = await prisma.product.findMany({
+            where: {
+                isPublished: true
+            }
+        })
+
+        let datas = []
     
+    
+        await fetch(link, { method: "GET", headers: { "content-type": "application/json;charset=UTF-8", "Authorization": process.env.WB_TOKEN }}).then((response) => response.json()).then((data) => {datas = data})
+  
+        const filteredData = datas.filter(item => item.quantity > 0);
+          const groupedData = {};
+    
+          filteredData.forEach(item => {
+              if (!groupedData[item.nmId]) {
+                  groupedData[item.nmId] = {
+                      nmId: item.nmId,
+                      quantity: 0,
+                      totalQuantity: 0,
+                      warehouses: {},
+                      subject: item.subject
+                  };
+              }
+    
+            if (!groupedData[item.nmId].warehouses[item.warehouseName]) {
+                groupedData[item.nmId].warehouses[item.warehouseName] = {
+                    quantity: 0,
+                    quantityFull: 0,
+                    inWayFromClient: 0,
+                    inWayToClient: 0
+                };
+            }
+    
+            groupedData[item.nmId].warehouses[item.warehouseName].quantity += item.quantity;
+            groupedData[item.nmId].warehouses[item.warehouseName].quantityFull += item.quantityFull;
+            groupedData[item.nmId].warehouses[item.warehouseName].inWayFromClient += item.inWayFromClient;
+            groupedData[item.nmId].totalQuantity += item.quantityFull - item.inWayToClient;
+            groupedData[item.nmId].quantity += item.quantity
+          });
+        
+        productsByDb.forEach(item => {
+            let message = ""
+            
+            Object.values(groupedData).forEach(elem => {
+                if (item.nmId === elem.nmId) {
+                    const countNeed = Math.round((process.env.DAY_FOR_BUY * item.soldInDay) * item.ratio)
+                    if (countNeed >= elem.totalQuantity) {
+                        message += `Необходимо 💥<code>ЗАКАЗАТЬ</code>💥\n${elem.subject}:${elem.nmId}\nПрогнозируемые продажи: ${countNeed}💹\nВ наличии: ${elem.totalQuantity}⚠️\nДозаказать: ${countNeed-elem.totalQuantity}🛑\n\n`
+                    }
+
+                    if (elem.totalQuantity < item.varn) {
+                        message += `⚠️ВНИМАНИЕ⚠️\n${elem.subject}:${elem.nmId} меньше установленных значений\nВ наличии: ${elem.totalQuantity}⭕️\nУстановленное значение: ${item.varn}❕\n\n`
+                    }
+
+                    if (elem.totalQuantity < item.danger) {
+                        message += `⛔️‼️ОПАСНОСТЬ‼️⛔️\n${elem.subject}:${elem.nmId} меньше установленных значений\nВ наличии: ${elem.totalQuantity}⭕️\nУстановленное значение: ${item.danger}❕\n\n`
+                    }
+                    bot.sendMessage(msg.chat.id, message, {parse_mode: "HTML"})
+                }
+        })
+        })
+
+        setInterval(async() => {
+            const productsByDb = await prisma.product.findMany({
+                where: {
+                    isPublished: true
+                }
+            })
+    
+            let datas = []
+        
+        
+            await fetch(link, { method: "GET", headers: { "content-type": "application/json;charset=UTF-8", "Authorization": process.env.WB_TOKEN }}).then((response) => response.json()).then((data) => {datas = data})
+      
+            const filteredData = datas.filter(item => item.quantity > 0);
+              const groupedData = {};
+        
+              filteredData.forEach(item => {
+                  if (!groupedData[item.nmId]) {
+                      groupedData[item.nmId] = {
+                          nmId: item.nmId,
+                          quantity: 0,
+                          totalQuantity: 0,
+                          warehouses: {},
+                          subject: item.subject
+                      };
+                  }
+        
+                if (!groupedData[item.nmId].warehouses[item.warehouseName]) {
+                    groupedData[item.nmId].warehouses[item.warehouseName] = {
+                        quantity: 0,
+                        quantityFull: 0,
+                        inWayFromClient: 0,
+                        inWayToClient: 0
+                    };
+                }
+        
+                groupedData[item.nmId].warehouses[item.warehouseName].quantity += item.quantity;
+                groupedData[item.nmId].warehouses[item.warehouseName].quantityFull += item.quantityFull;
+                groupedData[item.nmId].warehouses[item.warehouseName].inWayFromClient += item.inWayFromClient;
+                groupedData[item.nmId].totalQuantity += item.quantityFull - item.inWayToClient;
+                groupedData[item.nmId].quantity += item.quantity
+              });
+            
+            productsByDb.forEach(item => {
+                let message = ""
+                Object.values(groupedData).forEach(elem => {
+                    if (item.nmId === elem.nmId) {
+                        const countNeed = Math.round((process.env.DAY_FOR_BUY * item.soldInDay) * item.ratio)
+                        if (countNeed >= elem.totalQuantity) {
+                            message += `Необходимо 💥<code>ЗАКАЗАТЬ</code>💥\n${elem.subject}:${elem.nmId}\nПрогнозируемые продажи: ${countNeed}💹\nВ наличии: ${elem.totalQuantity}⚠️\nДозаказать: ${countNeed-elem.totalQuantity}🛑\n\n`
+                        }
+    
+                        if (elem.totalQuantity < item.varn) {
+                            message += `⚠️ВНИМАНИЕ⚠️\n${elem.subject}:${elem.nmId} меньше установленных значений\nВ наличии: ${elem.totalQuantity}⭕️\nУстановленное значение: ${item.varn}❕\n\n`
+                        }
+    
+                        if (elem.totalQuantity < item.danger) {
+                            message += `⛔️‼️ОПАСНОСТЬ‼️⛔️\n${elem.subject}:${elem.nmId} меньше установленных значений\nВ наличии: ${elem.totalQuantity}⭕️\nУстановленное значение: ${item.danger}❕\n\n`
+                        }
+                        bot.sendMessage(msg.chat.id, message, {parse_mode: "HTML"})
+                    }
+            })
+            })
+        }, 43200000)
+    }
+
+    if (msg.text === "/load_data") { 
+
+        let datas = []
+    
+    
+        await fetch(link, { method: "GET", headers: { "content-type": "application/json;charset=UTF-8", "Authorization": process.env.WB_TOKEN }}).then((response) => response.json()).then((data) => {datas = data})
+  
+        const filteredData = datas.filter(item => item.quantity > 0);
+        const groupedData = {};
+    
+        filteredData.forEach(item => {
+              if (!groupedData[item.nmId]) {
+                  groupedData[item.nmId] = {
+                      nmId: item.nmId,
+                      quantity: 0,
+                      totalQuantity: 0,
+                      warehouses: {},
+                      subject: item.subject
+                  };
+              }
+    
+            if (!groupedData[item.nmId].warehouses[item.warehouseName]) {
+                groupedData[item.nmId].warehouses[item.warehouseName] = {
+                    quantity: 0,
+                    quantityFull: 0,
+                    inWayFromClient: 0,
+                    inWayToClient: 0
+                };
+            }
+    
+            groupedData[item.nmId].warehouses[item.warehouseName].quantity += item.quantity;
+            groupedData[item.nmId].warehouses[item.warehouseName].quantityFull += item.quantityFull;
+            groupedData[item.nmId].warehouses[item.warehouseName].inWayFromClient += item.inWayFromClient;
+            groupedData[item.nmId].totalQuantity += item.quantityFull - item.inWayToClient;
+            groupedData[item.nmId].quantity += item.quantity
+        });
+
+        const productsByDb = await prisma.product.findMany()
+        const nmIdList = []
+        const needAdd = []
+        productsByDb.forEach(i => {nmIdList.push(i.nmId)})
+
+        Object.values(groupedData).forEach(elem => { 
+            if (!(elem.nmId in nmIdList)) {
+                needAdd.push([elem.nmId, elem.subject])
+            }
+        })
+
+        await bot.sendMessage(msg.chat.id, `Необходимо загрузить ${needAdd.length} элементов\n\n`)
+    } 
+
+
+
+    
+
+
 })
 
+}
 
-
-
-
-
-
+main()
+  .then(async () => {
+    await prisma.$disconnect()
+  })
+  .catch(async (e) => {
+    console.error(e)
+    await prisma.$disconnect()
+    process.exit(1)
+  })
 
 
 
