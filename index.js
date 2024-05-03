@@ -327,11 +327,6 @@ bot.on('text', async msg => {
         await bot.sendMessage(msg.chat.id, `Необходимо загрузить ${needAdd.length} элементов\n\n`)
     } 
 
-
-
-    
-
-
 })
 
 }
